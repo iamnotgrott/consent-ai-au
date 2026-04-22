@@ -82,3 +82,18 @@ export interface AppSnapshot {
   services: Service[]
   events: ConsentEvent[]
 }
+
+/** Row persisted by the local detections server / reported by the extension */
+export type DetectionKind = 'cookie_banner' | 'consent_click' | 'terms_surface'
+
+export interface StoredDetection {
+  id: string
+  origin: string
+  pageTitle: string
+  kind: DetectionKind
+  snippet: string
+  url: string
+  timestamp: string
+  selector?: string
+  updatedAt?: string
+}

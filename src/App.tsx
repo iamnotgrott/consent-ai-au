@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgreementsPanel } from './components/AgreementsPanel'
 import { DataFlowViz } from './components/DataFlowViz'
 import { EncKeyModal } from './components/EncKeyModal'
@@ -10,9 +10,15 @@ import { SecurityPanel } from './components/SecurityPanel'
 import { ServiceList } from './components/ServiceList'
 import { Toast } from './components/Toast'
 import { getInitialAppSnapshot } from './data/seed'
+import {
+  detectionIdToServiceId,
+  detectionToService,
+  mergeServicesWithDetections,
+} from './lib/detectionToService'
+import { fetchDetections } from './lib/detectionsApi'
 import { isExpiringWithinDays } from './lib/format'
 import { computeConsentHealth } from './lib/healthScore'
-import type { ConsentEvent, Service } from './types'
+import type { ConsentEvent, Service, StoredDetection } from './types'
 
 type Tab = 'dashboard' | 'flow' | 'history' | 'agreements' | 'security'
 
@@ -30,6 +36,10 @@ export default function App() {
   const [revokeTarget, setRevokeTarget] = useState<Service | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [encOpen, setEncOpen] = useState(false)
+  const [bridgeOnline, setBridgeOnline] = useState<boolean | null>(null)
+
+  const lastDetectionsRef = useRef<StoredDetection[]>([])
+  const knownExtEventIdsRef = useRef<Set<string>>(new Set())
 
   const health = useMemo(() => computeConsentHealth(services), [services])
 
@@ -65,12 +75,62 @@ export default function App() {
 
   const resetDemo = useCallback(() => {
     const next = loadSnapshot()
-    setServices(next.services)
-    setEvents(next.events)
+    const d = lastDetectionsRef.current
+    const extServices: Service[] = d.map((det) => {
+      const s = detectionToService(det)
+      return { ...s, status: 'active' as const }
+    })
+    setServices([...next.services, ...extServices])
+    const extEvents: ConsentEvent[] = d.map((det) => ({
+      id: `ev-ext-${det.id}`,
+      timestamp: det.timestamp,
+      type: 'granted' as const,
+      serviceId: detectionIdToServiceId(det.id),
+      detail: `Browser extension (file snapshot): ${det.kind} on ${det.origin}`,
+    }))
+    setEvents([...next.events, ...extEvents])
+    knownExtEventIdsRef.current = new Set(d.map((x) => x.id))
     setExpandedId(null)
     setTab('dashboard')
     setRevokeTarget(null)
-    setToast('Demo data reset to seed state.')
+    setToast('Demo data reset to seed state. Extension file data kept; merged on top of seed.')
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const tick = async () => {
+      try {
+        const d = await fetchDetections()
+        if (cancelled) return
+        setBridgeOnline(true)
+        lastDetectionsRef.current = d
+        setServices((prev) => mergeServicesWithDetections(prev, d))
+        setEvents((prev) => {
+          const added: ConsentEvent[] = []
+          for (const det of d) {
+            if (knownExtEventIdsRef.current.has(det.id)) continue
+            knownExtEventIdsRef.current.add(det.id)
+            added.push({
+              id: `ev-ext-${det.id}`,
+              timestamp: det.timestamp,
+              type: 'granted',
+              serviceId: detectionIdToServiceId(det.id),
+              detail: `Browser extension reported: ${det.kind} on ${det.origin}`,
+            })
+          }
+          if (added.length === 0) return prev
+          return [...added, ...prev]
+        })
+      } catch {
+        if (!cancelled) setBridgeOnline(false)
+      }
+    }
+    void tick()
+    const id = window.setInterval(tick, 2500)
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
+    }
   }, [])
 
   const toggleExpand = useCallback((id: string) => {
@@ -193,10 +253,22 @@ export default function App() {
         </nav>
       </header>
 
+      {bridgeOnline === false && (
+        <div
+          className="border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-center text-sm text-amber-100"
+          role="status"
+        >
+          Local detections bridge offline (is{' '}
+          <code className="rounded bg-black/20 px-1.5 py-0.5 font-mono text-xs">npm run dev:demo</code>{' '}
+          running? Store URL must match the extension, default{' '}
+          <code className="rounded bg-black/20 px-1.5 py-0.5 font-mono text-xs">127.0.0.1:3847</code>).
+        </div>
+      )}
+
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
         {tab === 'dashboard' && (
           <section aria-labelledby="dash-heading" className="space-y-4">
-            <OnboardingBanner message="GovPortal and HealthApp have high-risk, indefinite consents. DeliveryApp expires soon—review the Dashboard and Agreements." />
+            <OnboardingBanner message="GovPortal and HealthApp have high-risk, indefinite consents. DeliveryApp expires soon—review the Dashboard and Agreements. New rows from the browser extension appear when the local bridge is running." />
 
             <div className="grid gap-4 lg:grid-cols-[minmax(0,260px)_1fr]">
               <HealthCard

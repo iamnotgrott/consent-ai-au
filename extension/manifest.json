@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Consent OS detector",
+  "version": "1.0.0",
+  "description": "Sends heuristic consent/cookie surface captures to the local Consent OS store (dev demo).",
+  "permissions": ["storage"],
+  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Consent OS detections",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
