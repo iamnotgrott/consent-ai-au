@@ -1,0 +1,33 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'DM Sans', system-ui, sans-serif;
+  --color-consent-bg: #070b11;
+  --color-consent-surface: #12151c;
+  --color-consent-border: #252836;
+  /* Teal primary (contributor “Consent OS”) + violet as secondary */
+  --color-consent-teal: #00c9a7;
+  --color-consent-accent: #8b5cf6;
+  --color-consent-accent-soft: rgba(139, 92, 246, 0.12);
+  --color-consent-muted: #9499ab;
+  --color-consent-danger: #f87171;
+  --color-consent-success: #34d399;
+  --color-consent-warn: #f59e0b;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  font-family: var(--font-sans);
+  background: var(--color-consent-bg);
+  color: #e8e9ef;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100dvh;
+}
